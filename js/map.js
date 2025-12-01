@@ -9,6 +9,36 @@ class MapManager {
         this.suitableRoads = new L.FeatureGroup();
         this.generatedRoute = new L.FeatureGroup();
         this.startMarker = null;
+        this.currentTileLayer = null;
+
+        // Definizione stili mappa disponibili
+        this.mapStyles = {
+            osm: {
+                name: 'OSM Standard',
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            },
+            cyclosm: {
+                name: 'CyclOSM (Ciclismo)',
+                url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+                attribution: '&copy; OpenStreetMap contributors, CyclOSM',
+                maxZoom: 20
+            },
+            humanitarian: {
+                name: 'Humanitarian OSM',
+                url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+                attribution: '&copy; OpenStreetMap contributors, HOT',
+                maxZoom: 20
+            },
+            opentopo: {
+                name: 'OpenTopoMap',
+                url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+                attribution: '&copy; OpenStreetMap contributors, OpenTopoMap',
+                maxZoom: 17
+            }
+        };
+
         this.init();
     }
 
@@ -20,21 +50,13 @@ class MapManager {
             zoomControl: true
         });
 
-        // Tile layer con stile personalizzato (CartoDB Dark Matter)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            subdomains: 'abcd',
-            maxZoom: 20
-        }).addTo(this.map);
+        // Carica stile salvato o usa CyclOSM come default
+        const savedStyle = localStorage.getItem('mapStyle') || 'cyclosm';
+        this.setMapStyle(savedStyle);
 
-        // Alternative: stile chiaro personalizzato
-        // Uncomment per usare questo invece
-        /*
-        L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 20
-        }).addTo(this.map);
-        */
+        // NOTA: Per controllo completo su colori strade (sentieri marroni, provinciali gialle, ecc.)
+        // è necessario usare MapTiler o Mapbox con stile personalizzato
+        // Vedi: js/map-custom-style.js per la versione avanzata
 
         // Aggiungi i layer groups alla mappa
         this.suitableRoads.addTo(this.map);
@@ -224,6 +246,31 @@ class MapManager {
 
     resetCursor() {
         this.map.getContainer().style.cursor = '';
+    }
+
+    setMapStyle(styleKey) {
+        // Rimuovi tile layer precedente
+        if (this.currentTileLayer) {
+            this.map.removeLayer(this.currentTileLayer);
+        }
+
+        // Ottieni configurazione stile
+        const style = this.mapStyles[styleKey];
+        if (!style) {
+            console.error('Stile non trovato:', styleKey);
+            return;
+        }
+
+        // Aggiungi nuovo tile layer
+        this.currentTileLayer = L.tileLayer(style.url, {
+            attribution: style.attribution,
+            maxZoom: style.maxZoom
+        }).addTo(this.map);
+
+        // Salva preferenza
+        localStorage.setItem('mapStyle', styleKey);
+
+        showToast(`Stile mappa cambiato: ${style.name}`, 3000);
     }
 }
 

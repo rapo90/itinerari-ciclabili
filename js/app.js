@@ -85,6 +85,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ======================
+    // EVENT HANDLERS - Stile Mappa
+    // ======================
+
+    const mapStyleSelect = document.getElementById('mapStyleSelect');
+
+    // Imposta valore iniziale del select
+    const savedStyle = localStorage.getItem('mapStyle') || 'cyclosm';
+    mapStyleSelect.value = savedStyle;
+
+    // Cambio stile mappa
+    mapStyleSelect.addEventListener('change', (e) => {
+        const styleKey = e.target.value;
+        mapManager.setMapStyle(styleKey);
+    });
+
+    // ======================
     // EVENT HANDLERS - Generazione Percorso
     // ======================
 
