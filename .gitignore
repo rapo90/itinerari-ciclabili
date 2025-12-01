@@ -1,0 +1,36 @@
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node modules (se in futuro si aggiunge npm)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build files
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Data files (GPX personali)
+data/*.gpx
+data/*.geojson
+
+# Keep data directory but not its contents
+!data/.gitkeep
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+logs/
