@@ -60,16 +60,19 @@ class RouteGenerator {
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
-        const maxNonPreferredRatio = 0.20; // Max 20% su strade non preferite
 
         const routingService = window.routingService || new RoutingService();
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // Aumenta gradualmente i limiti dopo alcuni tentativi falliti
+            const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : 0.30);
+            const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : 5000);
+
             let route = {
                 coords: [],
                 segments: [],
                 totalDistance: 0,
-                nonPreferredDistance: 0 // Traccia distanza su strade non-idonee
+                nonPreferredDistance: 0
             };
 
             let currentPoint = this.startPoint;
@@ -77,13 +80,22 @@ class RouteGenerator {
             let stuck = 0;
 
             while (route.totalDistance < maxDistance && stuck < 15) {
-                // Trova strade vicine, ordinando per distanza
-                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, 3000); // 3km max
+                // Trova strade vicine con raggio progressivo
+                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, searchRadius);
 
                 if (nearbyRoads.length === 0) {
                     stuck++;
-                    if (stuck > 10) break;
-                    continue;
+                    // Dopo 5 tentativi, permetti di riusare strade già usate
+                    if (stuck > 5) {
+                        const anyRoads = this.findNearbyRoads(currentPoint, roads, new Set(), searchRadius);
+                        if (anyRoads.length > 0) {
+                            nearbyRoads.push(...anyRoads);
+                        }
+                    }
+                    if (nearbyRoads.length === 0) {
+                        if (stuck > 10) break;
+                        continue;
+                    }
                 }
 
                 // Se siamo vicini alla distanza target, prova a tornare all'inizio
@@ -209,11 +221,14 @@ class RouteGenerator {
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
-        const maxNonPreferredRatio = 0.20; // Max 20% su strade non preferite
 
         const routingService = window.routingService || new RoutingService();
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // Aumenta gradualmente i limiti dopo alcuni tentativi falliti
+            const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : 0.30);
+            const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : 5000);
+
             let route = {
                 coords: [],
                 segments: [],
@@ -226,12 +241,21 @@ class RouteGenerator {
             let stuck = 0;
 
             while (route.totalDistance < maxDistance && stuck < 15) {
-                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, 3000); // 3km max
+                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, searchRadius);
 
                 if (nearbyRoads.length === 0) {
                     stuck++;
-                    if (stuck > 10) break;
-                    continue;
+                    // Dopo 5 tentativi, permetti di riusare strade già usate
+                    if (stuck > 5) {
+                        const anyRoads = this.findNearbyRoads(currentPoint, roads, new Set(), searchRadius);
+                        if (anyRoads.length > 0) {
+                            nearbyRoads.push(...anyRoads);
+                        }
+                    }
+                    if (nearbyRoads.length === 0) {
+                        if (stuck > 10) break;
+                        continue;
+                    }
                 }
 
                 // Scegli una strada vicina (preferendo le più vicine)
@@ -533,9 +557,14 @@ class RouteGenerator {
         if (segmentsEl) segmentsEl.textContent = route.segments.length;
 
         // Messaggio con info su strade non-preferite
-        const message = nonPreferredPercent > 0 ?
-            `Percorso generato: ${route.totalDistance.toFixed(2)} km (${nonPreferredPercent}% su altre strade)` :
-            `Percorso generato: ${route.totalDistance.toFixed(2)} km (100% su strade preferite!)`;
+        let message;
+        if (nonPreferredPercent == 0) {
+            message = `Percorso generato: ${route.totalDistance.toFixed(2)} km (100% su strade preferite!)`;
+        } else if (nonPreferredPercent <= 20) {
+            message = `Percorso generato: ${route.totalDistance.toFixed(2)} km (${nonPreferredPercent}% su altre strade) ✓`;
+        } else {
+            message = `Percorso generato: ${route.totalDistance.toFixed(2)} km (${nonPreferredPercent}% su altre strade)`;
+        }
 
         showToast(message, 5000);
     }
