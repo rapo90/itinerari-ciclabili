@@ -57,7 +57,7 @@ class RouteGenerator {
     }
 
     async generateLoopRoute(targetDistance, roads) {
-        const maxAttempts = 30;
+        const maxAttempts = 50; // Aumentato da 30 a 50
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
@@ -65,9 +65,9 @@ class RouteGenerator {
         const routingService = window.routingService || new RoutingService();
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            // Aumenta gradualmente i limiti dopo alcuni tentativi falliti
-            const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : 0.30);
-            const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : 5000);
+            // Rilassamento più aggressivo dei vincoli
+            const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
+            const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : (attempt < 35 ? 5000 : 8000));
 
             let route = {
                 coords: [],
@@ -218,7 +218,7 @@ class RouteGenerator {
     }
 
     async generateLinearRoute(targetDistance, roads) {
-        const maxAttempts = 30;
+        const maxAttempts = 50; // Aumentato da 30 a 50
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
@@ -226,9 +226,9 @@ class RouteGenerator {
         const routingService = window.routingService || new RoutingService();
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            // Aumenta gradualmente i limiti dopo alcuni tentativi falliti
-            const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : 0.30);
-            const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : 5000);
+            // Rilassamento più aggressivo dei vincoli
+            const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
+            const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : (attempt < 35 ? 5000 : 8000));
 
             let route = {
                 coords: [],
@@ -427,7 +427,13 @@ class RouteGenerator {
         const nearby = [];
 
         roads.forEach(road => {
+            // Controlla se questo ID è già stato escluso
             if (excludeIds.has(road.id)) return;
+
+            // Controlla se questa strada si sovrappone significativamente con strade già usate
+            if (this.hasSignificantOverlap(road, roads, excludeIds)) {
+                return; // Skip this road if it overlaps with already used roads
+            }
 
             const minDist = this.getMinDistanceToRoad(point, road.coords);
             if (minDist <= maxDistance) {
@@ -439,6 +445,67 @@ class RouteGenerator {
         nearby.sort((a, b) => a.distance - b.distance);
 
         return nearby;
+    }
+
+    /**
+     * Verifica se una strada si sovrappone significativamente con strade già usate
+     */
+    hasSignificantOverlap(road, allRoads, usedIds) {
+        // Ottieni lista di strade già usate
+        const usedRoads = allRoads.filter(r => {
+            // Controlla se l'ID base (senza direzione) è già stato usato
+            const baseUsedId = r.id.replace(/-(forward|backward)$/, '');
+            for (let usedId of usedIds) {
+                const baseId = usedId.replace(/-(forward|backward)$/, '');
+                if (baseUsedId === baseId || baseId === r.id) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // Controlla sovrapposizione con ciascuna strada usata
+        for (let usedRoad of usedRoads) {
+            const overlapPercentage = this.calculateOverlapPercentage(road.coords, usedRoad.coords);
+
+            // Se si sovrappongono per più del 70%, considera la strada come già usata
+            if (overlapPercentage > 0.7) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Calcola la percentuale di sovrapposizione tra due strade
+     */
+    calculateOverlapPercentage(coords1, coords2) {
+        if (coords1.length < 2 || coords2.length < 2) return 0;
+
+        let overlapCount = 0;
+        const threshold = 0.05; // 50 metri di tolleranza
+
+        // Conta quanti punti di coords1 sono vicini a coords2
+        for (let point of coords1) {
+            for (let i = 0; i < coords2.length - 1; i++) {
+                const dist = this.pointToSegmentDistance(point, coords2[i], coords2[i + 1]);
+                if (dist < threshold) {
+                    overlapCount++;
+                    break; // Conta questo punto solo una volta
+                }
+            }
+        }
+
+        return overlapCount / coords1.length;
+    }
+
+    /**
+     * Calcola distanza punto-segmento in km
+     */
+    pointToSegmentDistance(point, segStart, segEnd) {
+        const projected = this.projectPointOnSegment(point, segStart, segEnd);
+        return this.haversineDistance(point, projected);
     }
 
     haversineDistance(point1, point2) {
