@@ -67,27 +67,21 @@ class OSMCyclewaysLoader {
      * Query Overpass API per strade ciclabili
      */
     async queryOverpass(centerPoint, radiusMeters) {
-        // Query Overpass per diversi tipi di strade ciclabili
+        // Query Overpass RESTRITTIVA - solo piste ciclabili dedicate
         const query = `
             [out:json][timeout:60];
             (
-              // Piste ciclabili dedicate
+              // SOLO piste ciclabili dedicate
               way["highway"="cycleway"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
 
-              // Sentieri ciclabili
-              way["highway"="path"]["bicycle"~"yes|designated"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
+              // Sentieri SOLO con bicycle=designated (non "yes")
+              way["highway"="path"]["bicycle"="designated"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
 
-              // Strade sterrate ciclabili
-              way["highway"="track"]["bicycle"~"yes|designated"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
-
-              // Strade con corsie ciclabili
-              way["cycleway"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
+              // Strade con corsie ciclabili dedicate (track o lane)
+              way["cycleway"~"track|lane|opposite_track|opposite_lane"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
 
               // Percorsi ciclabili ufficiali
-              way["highway"]["bicycle"="designated"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
-
-              // Strade secondarie con basso traffico (residential/unclassified)
-              way["highway"~"residential|unclassified"]["bicycle"!="no"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
+              way["route"="bicycle"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
             );
             out geom;
         `;

@@ -69,6 +69,9 @@ class RouteGenerator {
             const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
             const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : (attempt < 35 ? 5000 : 8000));
 
+            // Soglia deduplicazione: più permissiva nei primi tentativi
+            const overlapThreshold = attempt < 15 ? 0.95 : (attempt < 30 ? 0.85 : 0.75);
+
             let route = {
                 coords: [],
                 segments: [],
@@ -81,8 +84,8 @@ class RouteGenerator {
             let stuck = 0;
 
             while (route.totalDistance < maxDistance && stuck < 15) {
-                // Trova strade vicine con raggio progressivo
-                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, searchRadius);
+                // Trova strade vicine con raggio progressivo e soglia deduplicazione variabile
+                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, searchRadius, overlapThreshold);
 
                 if (nearbyRoads.length === 0) {
                     stuck++;
@@ -102,7 +105,7 @@ class RouteGenerator {
                 // Se siamo vicini alla distanza target, prova a tornare all'inizio
                 if (route.totalDistance >= minDistance) {
                     // Prima prova a trovare una strada idonea che ci riporta vicino all'inizio
-                    const roadsNearStart = this.findRoadsNearPoint(this.startPoint, roads, usedSegments, 2000);
+                    const roadsNearStart = this.findRoadsNearPoint(this.startPoint, roads, usedSegments, 2000, overlapThreshold);
 
                     if (roadsNearStart.length > 0) {
                         // Usa una strada idonea per avvicinarci all'inizio
@@ -230,6 +233,9 @@ class RouteGenerator {
             const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
             const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : (attempt < 35 ? 5000 : 8000));
 
+            // Soglia deduplicazione: più permissiva nei primi tentativi
+            const overlapThreshold = attempt < 15 ? 0.95 : (attempt < 30 ? 0.85 : 0.75);
+
             let route = {
                 coords: [],
                 segments: [],
@@ -242,7 +248,7 @@ class RouteGenerator {
             let stuck = 0;
 
             while (route.totalDistance < maxDistance && stuck < 15) {
-                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, searchRadius);
+                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, searchRadius, overlapThreshold);
 
                 if (nearbyRoads.length === 0) {
                     stuck++;
@@ -330,11 +336,16 @@ class RouteGenerator {
     /**
      * Trova strade idonee vicine a un punto specifico
      */
-    findRoadsNearPoint(point, roads, excludeIds, maxDistance = 2000) {
+    findRoadsNearPoint(point, roads, excludeIds, maxDistance = 2000, overlapThreshold = 0.90) {
         const nearby = [];
 
         roads.forEach(road => {
             if (excludeIds.has(road.id)) return;
+
+            // Controlla anche sovrapposizione con strade già usate
+            if (this.hasSignificantOverlap(road, roads, excludeIds, overlapThreshold)) {
+                return;
+            }
 
             const minDist = this.getMinDistanceToRoad(point, road.coords);
             if (minDist <= maxDistance) {
@@ -423,7 +434,7 @@ class RouteGenerator {
         }
     }
 
-    findNearbyRoads(point, roads, excludeIds, maxDistance = 5000) {
+    findNearbyRoads(point, roads, excludeIds, maxDistance = 5000, overlapThreshold = 0.90) {
         const nearby = [];
 
         roads.forEach(road => {
@@ -431,7 +442,8 @@ class RouteGenerator {
             if (excludeIds.has(road.id)) return;
 
             // Controlla se questa strada si sovrappone significativamente con strade già usate
-            if (this.hasSignificantOverlap(road, roads, excludeIds)) {
+            // Soglia configurabile per essere meno aggressivi nei primi tentativi
+            if (this.hasSignificantOverlap(road, roads, excludeIds, overlapThreshold)) {
                 return; // Skip this road if it overlaps with already used roads
             }
 
@@ -450,7 +462,7 @@ class RouteGenerator {
     /**
      * Verifica se una strada si sovrappone significativamente con strade già usate
      */
-    hasSignificantOverlap(road, allRoads, usedIds) {
+    hasSignificantOverlap(road, allRoads, usedIds, threshold = 0.90) {
         // Ottieni lista di strade già usate
         const usedRoads = allRoads.filter(r => {
             // Controlla se l'ID base (senza direzione) è già stato usato
@@ -468,8 +480,8 @@ class RouteGenerator {
         for (let usedRoad of usedRoads) {
             const overlapPercentage = this.calculateOverlapPercentage(road.coords, usedRoad.coords);
 
-            // Se si sovrappongono per più del 70%, considera la strada come già usata
-            if (overlapPercentage > 0.7) {
+            // Usa soglia configurabile (default 90%, era 70%)
+            if (overlapPercentage > threshold) {
                 return true;
             }
         }
