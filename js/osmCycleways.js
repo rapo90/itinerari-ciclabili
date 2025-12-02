@@ -6,11 +6,10 @@ class OSMCyclewaysLoader {
     constructor(roadManager, mapManager) {
         this.roadManager = roadManager;
         this.mapManager = mapManager;
-        // Server Overpass alternativi più affidabili
+        // Usa proxy locale per evitare problemi CORS
+        // Il proxy gestisce automaticamente il retry su server alternativi
         this.overpassUrls = [
-            'https://overpass.kumi.systems/api/interpreter',
-            'https://overpass-api.de/api/interpreter',
-            'https://overpass.openstreetmap.ru/api/interpreter'
+            '/api/overpass'  // Proxy locale che inoltra a Overpass API
         ];
         this.currentUrlIndex = 0;
         this.loadedAreas = new Set(); // Cache aree già caricate
