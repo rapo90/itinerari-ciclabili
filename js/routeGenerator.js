@@ -64,6 +64,8 @@ class RouteGenerator {
 
         const routingService = window.routingService || new RoutingService();
 
+        console.log(`🔄 Inizio generazione loop: ${roads.length} strade disponibili, target ${targetDistance}km`);
+
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             // Rilassamento più aggressivo dei vincoli
             const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
@@ -71,6 +73,10 @@ class RouteGenerator {
 
             // Soglia deduplicazione: più permissiva nei primi tentativi
             const overlapThreshold = attempt < 15 ? 0.95 : (attempt < 30 ? 0.85 : 0.75);
+
+            if (attempt % 10 === 0) {
+                console.log(`  Tentativo ${attempt}: radius=${searchRadius}m, overlap=${(overlapThreshold*100).toFixed(0)}%, maxNonPref=${(maxNonPreferredRatio*100).toFixed(0)}%`);
+            }
 
             let route = {
                 coords: [],
@@ -91,7 +97,7 @@ class RouteGenerator {
                     stuck++;
                     // Dopo 5 tentativi, permetti di riusare strade già usate
                     if (stuck > 5) {
-                        const anyRoads = this.findNearbyRoads(currentPoint, roads, new Set(), searchRadius);
+                        const anyRoads = this.findNearbyRoads(currentPoint, roads, new Set(), searchRadius, overlapThreshold);
                         if (anyRoads.length > 0) {
                             nearbyRoads.push(...anyRoads);
                         }
@@ -209,6 +215,7 @@ class RouteGenerator {
                     if ((route.totalDistance + distToStart) <= maxDistance) {
                         route.coords.push(...routeToStart);
                         route.totalDistance += distToStart;
+                        console.log(`✅ Percorso trovato al tentativo ${attempt}! Distanza: ${route.totalDistance.toFixed(2)}km`);
                         return route;
                     }
                 } catch (error) {
@@ -217,6 +224,7 @@ class RouteGenerator {
             }
         }
 
+        console.error(`❌ Impossibile generare percorso dopo ${maxAttempts} tentativi`);
         return null;
     }
 
@@ -254,7 +262,7 @@ class RouteGenerator {
                     stuck++;
                     // Dopo 5 tentativi, permetti di riusare strade già usate
                     if (stuck > 5) {
-                        const anyRoads = this.findNearbyRoads(currentPoint, roads, new Set(), searchRadius);
+                        const anyRoads = this.findNearbyRoads(currentPoint, roads, new Set(), searchRadius, overlapThreshold);
                         if (anyRoads.length > 0) {
                             nearbyRoads.push(...anyRoads);
                         }
@@ -496,7 +504,7 @@ class RouteGenerator {
         if (coords1.length < 2 || coords2.length < 2) return 0;
 
         let overlapCount = 0;
-        const threshold = 0.05; // 50 metri di tolleranza
+        const threshold = 0.1; // 100 metri di tolleranza (aumentato da 50m)
 
         // Conta quanti punti di coords1 sono vicini a coords2
         for (let point of coords1) {
