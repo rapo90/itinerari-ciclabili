@@ -20,7 +20,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: 380px;
-    background: linear-gradient(135deg, #2E7D32 0%, #558B2F 50%, #795548 100%);
+    background: linear-gradient(135deg, #424242 0%, #616161 100%);
     color: white;
     padding: 20px;
     overflow-y: auto;
@@ -145,7 +145,7 @@ body {
 
 .form-control:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #2E7D32;
 }
 
 .form-group small {
@@ -298,12 +298,12 @@ body {
 
 /* Custom Leaflet Draw Controls */
 .leaflet-draw-toolbar a {
-    background-color: #667eea !important;
+    background-color: #2E7D32 !important;
 }
 
 .leaflet-draw-actions a {
     background-color: white;
-    color: #667eea;
+    color: #2E7D32;
 }
 
 /* Custom Marker */

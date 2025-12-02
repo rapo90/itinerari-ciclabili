@@ -71,6 +71,11 @@ class MapManager {
     }
 
     initDrawControls() {
+        // Variabili per il routing in tempo reale
+        this.realtimePoints = [];
+        this.realtimeCoords = [];
+        this.realtimePreviewLayer = null;
+
         // Configura i controlli di disegno (inizialmente nascosti)
         this.drawControl = new L.Control.Draw({
             draw: {
@@ -96,13 +101,97 @@ class MapManager {
             }
         });
 
+        // Event handler per l'inizio del disegno
+        this.map.on(L.Draw.Event.DRAWSTART, (e) => {
+            this.realtimePoints = [];
+            this.realtimeCoords = [];
+            if (this.realtimePreviewLayer) {
+                this.map.removeLayer(this.realtimePreviewLayer);
+                this.realtimePreviewLayer = null;
+            }
+        });
+
+        // Event handler per ogni vertice aggiunto durante il disegno
+        this.map.on(L.Draw.Event.DRAWVERTEX, async (e) => {
+            const layers = e.layers;
+            const newPoint = e.layers.getLayers()[e.layers.getLayers().length - 1].getLatLng();
+
+            this.realtimePoints.push(newPoint);
+
+            // Se abbiamo almeno 2 punti, fa routing tra gli ultimi due
+            if (this.realtimePoints.length >= 2) {
+                const fromPoint = this.realtimePoints[this.realtimePoints.length - 2];
+                const toPoint = this.realtimePoints[this.realtimePoints.length - 1];
+
+                try {
+                    const routingService = window.routingService || new RoutingService();
+                    const segmentCoords = await routingService.getRoute(fromPoint, toPoint);
+
+                    // Aggiungi le coordinate del nuovo segmento (escludi il primo punto per evitare duplicati)
+                    if (this.realtimeCoords.length > 0) {
+                        this.realtimeCoords.push(...segmentCoords.slice(1));
+                    } else {
+                        this.realtimeCoords.push(...segmentCoords);
+                    }
+
+                    // Aggiorna il layer di preview
+                    if (this.realtimePreviewLayer) {
+                        this.map.removeLayer(this.realtimePreviewLayer);
+                    }
+
+                    this.realtimePreviewLayer = L.polyline(this.realtimeCoords, {
+                        color: '#2E7D32',
+                        weight: 6,
+                        opacity: 0.8
+                    }).addTo(this.map);
+
+                } catch (error) {
+                    console.error('Errore nel routing real-time:', error);
+                }
+            }
+        });
+
         // Event handler per quando viene creata una nuova linea
         this.map.on(L.Draw.Event.CREATED, async (e) => {
+            // Rimuovi il layer di preview
+            if (this.realtimePreviewLayer) {
+                this.map.removeLayer(this.realtimePreviewLayer);
+                this.realtimePreviewLayer = null;
+            }
+
             const layer = e.layer;
             const clickedPoints = layer.getLatLngs();
 
-            // Se ci sono almeno 2 punti, fa routing tra di loro
-            if (clickedPoints.length >= 2) {
+            // Se abbiamo già le coordinate dal routing in tempo reale, usale
+            if (this.realtimeCoords.length >= 2) {
+                const roadCoords = this.realtimeCoords;
+
+                // Crea una nuova polyline con le coordinate del percorso
+                const roadLayer = L.polyline(roadCoords, {
+                    color: '#2E7D32',
+                    weight: 6,
+                    opacity: 0.8
+                });
+
+                this.drawnItems.addLayer(roadLayer);
+
+                // Calcola la distanza effettiva del percorso
+                const routingService = window.routingService || new RoutingService();
+                const distance = routingService.calculateDistance(roadCoords);
+
+                // Salva la strada come idonea
+                if (window.roadManager) {
+                    window.roadManager.addRoad(roadCoords, distance);
+                }
+
+                showToast(`✓ Strada aggiunta: ${distance.toFixed(2)} km (segue le strade)`, 3000);
+
+                // Reset delle variabili per il prossimo disegno
+                this.realtimePoints = [];
+                this.realtimeCoords = [];
+
+            } else if (clickedPoints.length >= 2) {
+                // Fallback: se per qualche motivo non abbiamo le coordinate real-time, fai routing ora
                 showToast('Calcolo percorso stradale...', 2000);
 
                 try {
@@ -155,6 +244,17 @@ class MapManager {
             }
         });
 
+        // Event handler per quando il disegno viene annullato
+        this.map.on(L.Draw.Event.DRAWSTOP, (e) => {
+            // Pulisci il layer di preview
+            if (this.realtimePreviewLayer) {
+                this.map.removeLayer(this.realtimePreviewLayer);
+                this.realtimePreviewLayer = null;
+            }
+            this.realtimePoints = [];
+            this.realtimeCoords = [];
+        });
+
         // Event handler per quando viene eliminata una linea
         this.map.on(L.Draw.Event.DELETED, (e) => {
             const layers = e.layers;
@@ -202,6 +302,33 @@ class MapManager {
             smoothFactor: 1
         });
 
+        // Aggiungi un popup con opzioni per modificare/eliminare
+        const distance = this.calculateDistance(coords);
+        const popupContent = `
+            <div style="text-align: center; min-width: 150px;">
+                <strong>Strada Idonea</strong><br>
+                Distanza: ${distance.toFixed(2)} km<br><br>
+                <button onclick="window.mapManager.deleteRoad(this)" data-layer-id="${L.stamp(polyline)}"
+                    style="background: #D32F2F; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin: 3px; font-weight: 600;">
+                    🗑️ Elimina
+                </button>
+                <button onclick="window.mapManager.highlightRoad(${L.stamp(polyline)})"
+                    style="background: #2E7D32; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin: 3px; font-weight: 600;">
+                    👁️ Evidenzia
+                </button>
+            </div>
+        `;
+
+        polyline.bindPopup(popupContent);
+
+        // Rendi la linea cliccabile
+        polyline.on('click', function(e) {
+            polyline.openPopup();
+        });
+
+        // Salva le coordinate nella polyline per poterla identificare
+        polyline._savedCoords = coords;
+
         this.suitableRoads.addLayer(polyline);
         return polyline;
     }
@@ -222,6 +349,28 @@ class MapManager {
 
         this.generatedRoute.addLayer(polyline);
 
+        // Aggiungi frecce direzionali al percorso generato
+        const arrowDecorator = L.polylineDecorator(polyline, {
+            patterns: [
+                {
+                    offset: '10%',
+                    repeat: '100px',
+                    symbol: L.Symbol.arrowHead({
+                        pixelSize: 12,
+                        polygon: false,
+                        pathOptions: {
+                            stroke: true,
+                            color: color,
+                            weight: 3,
+                            opacity: 0.9
+                        }
+                    })
+                }
+            ]
+        });
+
+        this.generatedRoute.addLayer(arrowDecorator);
+
         // Fit bounds per vedere tutto il percorso
         this.map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
 
@@ -230,6 +379,67 @@ class MapManager {
 
     clearGeneratedRoute() {
         this.generatedRoute.clearLayers();
+    }
+
+    deleteRoad(buttonElement) {
+        const layerId = parseInt(buttonElement.getAttribute('data-layer-id'));
+
+        // Cerca il layer nei gruppi
+        let layerToRemove = null;
+
+        this.suitableRoads.eachLayer((layer) => {
+            if (L.stamp(layer) === layerId) {
+                layerToRemove = layer;
+            }
+        });
+
+        if (layerToRemove) {
+            const coords = layerToRemove._savedCoords || layerToRemove.getLatLngs();
+
+            // Rimuovi dalla mappa
+            this.suitableRoads.removeLayer(layerToRemove);
+
+            // Rimuovi anche da drawnItems se presente
+            this.drawnItems.eachLayer((layer) => {
+                if (L.stamp(layer) === layerId) {
+                    this.drawnItems.removeLayer(layer);
+                }
+            });
+
+            // Rimuovi dallo storage
+            if (window.roadManager) {
+                window.roadManager.removeRoadByCoords(coords);
+            }
+
+            showToast('✓ Strada eliminata', 2000);
+        }
+    }
+
+    highlightRoad(layerId) {
+        // Trova il layer e evidenzialo temporaneamente
+        this.suitableRoads.eachLayer((layer) => {
+            if (L.stamp(layer) === layerId) {
+                const originalColor = layer.options.color;
+                const originalWeight = layer.options.weight;
+
+                // Evidenzia
+                layer.setStyle({
+                    color: '#FFEB3B',
+                    weight: 10
+                });
+
+                // Ritorna al normale dopo 2 secondi
+                setTimeout(() => {
+                    layer.setStyle({
+                        color: originalColor,
+                        weight: originalWeight
+                    });
+                }, 2000);
+
+                // Centra la mappa sul segmento
+                this.map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+            }
+        });
     }
 
     setStartMarker(latlng) {
