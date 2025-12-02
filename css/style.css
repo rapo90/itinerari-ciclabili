@@ -20,7 +20,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: 380px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #2E7D32 0%, #558B2F 50%, #795548 100%);
     color: white;
     padding: 20px;
     overflow-y: auto;
@@ -82,7 +82,7 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #2E7D32 0%, #388E3C 100%);
     color: white;
     border: 2px solid white;
 }
@@ -94,12 +94,12 @@ body {
 }
 
 .btn-danger {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, #D32F2F 0%, #C62828 100%);
     color: white;
 }
 
 .btn-upload {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #795548 0%, #8D6E63 100%);
     color: white;
     cursor: pointer;
     border: 2px solid white;
@@ -242,7 +242,7 @@ body {
     position: fixed;
     bottom: 30px;
     right: 30px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #2E7D32 0%, #558B2F 100%);
     color: white;
     padding: 15px 25px;
     border-radius: 8px;
