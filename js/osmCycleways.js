@@ -17,9 +17,12 @@ class OSMCyclewaysLoader {
     }
 
     /**
-     * Carica strade ciclabili OSM in un raggio di 25km dal punto specificato
+     * Carica strade ciclabili OSM in un raggio specificato dal punto
+     * @param {Object} centerPoint - Punto centrale {lat, lng}
+     * @param {Number} radiusKm - Raggio in km (default 25)
+     * @param {String} color - Colore per visualizzare le strade (default '#2E7D32' verde standard, '#1B5E20' verde scuro)
      */
-    async loadCyclewaysAroundPoint(centerPoint, radiusKm = 25) {
+    async loadCyclewaysAroundPoint(centerPoint, radiusKm = 25, color = '#2E7D32') {
         const radiusMeters = radiusKm * 1000;
 
         // Crea ID area per evitare duplicati
@@ -49,9 +52,9 @@ class OSMCyclewaysLoader {
             // Aggiungi alla lista OSM roads
             this.osmRoads.push(...roads);
 
-            // Visualizza sulla mappa
+            // Visualizza sulla mappa con il colore specificato
             roads.forEach(road => {
-                this.mapManager.addSuitableRoad(road.coords, '#2E7D32');
+                this.mapManager.addSuitableRoad(road.coords, color);
             });
 
             // Marca area come caricata

@@ -33,6 +33,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ======================
+    // AUTO-LOAD AREA DESENZANO
+    // ======================
+
+    // Carica automaticamente ciclabili OSM intorno a Desenzano del Garda (50km)
+    (async function autoLoadDesenzano() {
+        const DESENZANO = { lat: 45.4708, lng: 10.5395 };
+        const RADIUS_KM = 50;
+
+        console.log(`🔄 Caricamento automatico area Desenzano (${RADIUS_KM}km)...`);
+        showToast(`🔄 Caricamento ciclabili Desenzano (${RADIUS_KM}km)...`, 3000);
+
+        try {
+            // Carica con colore verde scuro per distinguere da strade manuali
+            const osmRoads = await osmLoader.loadCyclewaysAroundPoint(
+                DESENZANO,
+                RADIUS_KM,
+                '#1B5E20'  // Verde scuro per area pre-caricata
+            );
+
+            // Salva le strade OSM nel roadManager
+            roadManager.setOSMRoads(osmRoads);
+
+            console.log(`✅ Area Desenzano caricata: ${osmRoads.length} strade OSM`);
+            showToast(`✅ Caricate ${osmRoads.length} ciclabili (Desenzano ${RADIUS_KM}km)`, 5000);
+
+        } catch (error) {
+            console.error('❌ Errore caricamento area Desenzano:', error);
+            showToast('⚠️ Caricamento area Desenzano fallito (prova a ricaricare)', 5000);
+        }
+    })();
+
+    // ======================
     // EVENT HANDLERS - Gestione Strade
     // ======================
 
