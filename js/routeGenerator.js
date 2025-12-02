@@ -60,6 +60,7 @@ class RouteGenerator {
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
+        const maxNonPreferredRatio = 0.20; // Max 20% su strade non preferite
 
         const routingService = window.routingService || new RoutingService();
 
@@ -67,7 +68,8 @@ class RouteGenerator {
             let route = {
                 coords: [],
                 segments: [],
-                totalDistance: 0
+                totalDistance: 0,
+                nonPreferredDistance: 0 // Traccia distanza su strade non-idonee
             };
 
             let currentPoint = this.startPoint;
@@ -75,8 +77,8 @@ class RouteGenerator {
             let stuck = 0;
 
             while (route.totalDistance < maxDistance && stuck < 15) {
-                // Trova strade vicine
-                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments);
+                // Trova strade vicine, ordinando per distanza
+                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, 3000); // 3km max
 
                 if (nearbyRoads.length === 0) {
                     stuck++;
@@ -86,42 +88,92 @@ class RouteGenerator {
 
                 // Se siamo vicini alla distanza target, prova a tornare all'inizio
                 if (route.totalDistance >= minDistance) {
-                    try {
-                        const routeToStart = await routingService.getRoute(currentPoint, this.startPoint);
-                        const distToStart = routingService.calculateDistance(routeToStart);
+                    // Prima prova a trovare una strada idonea che ci riporta vicino all'inizio
+                    const roadsNearStart = this.findRoadsNearPoint(this.startPoint, roads, usedSegments, 2000);
 
-                        if (distToStart < 5 && (route.totalDistance + distToStart) <= maxDistance) {
-                            // Aggiungi percorso di ritorno
-                            route.coords.push(...routeToStart);
-                            route.totalDistance += distToStart;
+                    if (roadsNearStart.length > 0) {
+                        // Usa una strada idonea per avvicinarci all'inizio
+                        const roadTowardStart = roadsNearStart[0].road;
 
-                            if (route.totalDistance >= minDistance && route.totalDistance <= maxDistance) {
-                                return route; // Successo!
+                        try {
+                            const segment = await this.connectToRoadWithRouting(
+                                currentPoint,
+                                roadTowardStart,
+                                routingService,
+                                route,
+                                maxNonPreferredRatio
+                            );
+
+                            if (segment && this.isWithinNonPreferredLimit(route, segment, maxNonPreferredRatio)) {
+                                const segmentId = `${roadTowardStart.id}-${segment.direction}`;
+                                usedSegments.add(segmentId);
+
+                                route.coords.push(...segment.coords);
+                                route.segments.push(segment);
+                                route.totalDistance += segment.distance;
+                                route.nonPreferredDistance += segment.nonPreferredDistance || 0;
+
+                                currentPoint = segment.coords[segment.coords.length - 1];
+
+                                // Ora prova a tornare all'inizio
+                                const distToStart = this.haversineDistance(currentPoint, this.startPoint);
+                                if (distToStart < 1) { // Entro 1km
+                                    try {
+                                        const routeToStart = await routingService.getRoute(currentPoint, this.startPoint);
+                                        const distToStartReal = routingService.calculateDistance(routeToStart);
+
+                                        if ((route.totalDistance + distToStartReal) <= maxDistance) {
+                                            route.coords.push(...routeToStart);
+                                            route.totalDistance += distToStartReal;
+                                            route.nonPreferredDistance += distToStartReal;
+
+                                            // Controlla limite 20%
+                                            if (route.nonPreferredDistance / route.totalDistance <= maxNonPreferredRatio) {
+                                                return route; // Successo!
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.error('Errore routing finale:', error);
+                                    }
+                                }
                             }
+                        } catch (error) {
+                            console.error('Errore connessione strada verso inizio:', error);
                         }
-                    } catch (error) {
-                        console.error('Errore routing verso partenza:', error);
                     }
                 }
 
-                // Scegli una strada casuale tra le vicine
-                const chosenIndex = this.weightedRandomChoice(nearbyRoads.length);
+                // Scegli una strada vicina (preferendo le più vicine)
+                const chosenIndex = this.weightedRandomChoice(Math.min(3, nearbyRoads.length));
                 const chosenRoad = nearbyRoads[chosenIndex].road;
 
                 try {
-                    // Connetti alla strada usando routing
-                    const segment = await this.connectToRoadWithRouting(currentPoint, chosenRoad, routingService);
+                    // Connetti alla strada usando routing, con limite strade non-idonee
+                    const segment = await this.connectToRoadWithRouting(
+                        currentPoint,
+                        chosenRoad,
+                        routingService,
+                        route,
+                        maxNonPreferredRatio
+                    );
 
                     if (segment && segment.coords.length > 0) {
-                        const segmentId = `${chosenRoad.id}-${segment.direction}`;
-                        usedSegments.add(segmentId);
+                        // Controlla se rispetta il limite 20%
+                        if (this.isWithinNonPreferredLimit(route, segment, maxNonPreferredRatio)) {
+                            const segmentId = `${chosenRoad.id}-${segment.direction}`;
+                            usedSegments.add(segmentId);
 
-                        route.coords.push(...segment.coords);
-                        route.segments.push(segment);
-                        route.totalDistance += segment.distance;
+                            route.coords.push(...segment.coords);
+                            route.segments.push(segment);
+                            route.totalDistance += segment.distance;
+                            route.nonPreferredDistance += segment.nonPreferredDistance || 0;
 
-                        currentPoint = segment.coords[segment.coords.length - 1];
-                        stuck = 0;
+                            currentPoint = segment.coords[segment.coords.length - 1];
+                            stuck = 0;
+                        } else {
+                            // Questo segmento sforerebbe il limite 20%
+                            stuck++;
+                        }
                     } else {
                         stuck++;
                     }
@@ -157,6 +209,7 @@ class RouteGenerator {
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
+        const maxNonPreferredRatio = 0.20; // Max 20% su strade non preferite
 
         const routingService = window.routingService || new RoutingService();
 
@@ -164,7 +217,8 @@ class RouteGenerator {
             let route = {
                 coords: [],
                 segments: [],
-                totalDistance: 0
+                totalDistance: 0,
+                nonPreferredDistance: 0
             };
 
             let currentPoint = this.startPoint;
@@ -172,7 +226,7 @@ class RouteGenerator {
             let stuck = 0;
 
             while (route.totalDistance < maxDistance && stuck < 15) {
-                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments);
+                const nearbyRoads = this.findNearbyRoads(currentPoint, roads, usedSegments, 3000); // 3km max
 
                 if (nearbyRoads.length === 0) {
                     stuck++;
@@ -180,27 +234,43 @@ class RouteGenerator {
                     continue;
                 }
 
-                // Scegli una strada casuale
-                const chosenIndex = this.weightedRandomChoice(nearbyRoads.length);
+                // Scegli una strada vicina (preferendo le più vicine)
+                const chosenIndex = this.weightedRandomChoice(Math.min(3, nearbyRoads.length));
                 const chosenRoad = nearbyRoads[chosenIndex].road;
 
                 try {
-                    const segment = await this.connectToRoadWithRouting(currentPoint, chosenRoad, routingService);
+                    const segment = await this.connectToRoadWithRouting(
+                        currentPoint,
+                        chosenRoad,
+                        routingService,
+                        route,
+                        maxNonPreferredRatio
+                    );
 
                     if (segment && segment.coords.length > 0) {
-                        const segmentId = `${chosenRoad.id}-${segment.direction}`;
-                        usedSegments.add(segmentId);
+                        // Controlla se rispetta il limite 20%
+                        if (this.isWithinNonPreferredLimit(route, segment, maxNonPreferredRatio)) {
+                            const segmentId = `${chosenRoad.id}-${segment.direction}`;
+                            usedSegments.add(segmentId);
 
-                        route.coords.push(...segment.coords);
-                        route.segments.push(segment);
-                        route.totalDistance += segment.distance;
+                            route.coords.push(...segment.coords);
+                            route.segments.push(segment);
+                            route.totalDistance += segment.distance;
+                            route.nonPreferredDistance += segment.nonPreferredDistance || 0;
 
-                        currentPoint = segment.coords[segment.coords.length - 1];
-                        stuck = 0;
+                            currentPoint = segment.coords[segment.coords.length - 1];
+                            stuck = 0;
 
-                        // Se raggiunto target, termina
-                        if (route.totalDistance >= minDistance) {
-                            return route;
+                            // Se raggiunto target, termina
+                            if (route.totalDistance >= minDistance) {
+                                // Verifica che rispetti il limite 20%
+                                if (route.nonPreferredDistance / route.totalDistance <= maxNonPreferredRatio) {
+                                    return route;
+                                }
+                            }
+                        } else {
+                            // Questo segmento sforerebbe il limite 20%
+                            stuck++;
                         }
                     } else {
                         stuck++;
@@ -212,7 +282,10 @@ class RouteGenerator {
             }
 
             if (route.totalDistance >= minDistance && route.totalDistance <= maxDistance) {
-                return route;
+                // Verifica limite 20%
+                if (route.nonPreferredDistance / route.totalDistance <= maxNonPreferredRatio) {
+                    return route;
+                }
             }
         }
 
@@ -220,10 +293,40 @@ class RouteGenerator {
     }
 
     /**
+     * Verifica se aggiungere questo segmento rispetta il limite 20% strade non-preferite
+     */
+    isWithinNonPreferredLimit(route, segment, maxRatio) {
+        const newTotalDistance = route.totalDistance + segment.distance;
+        const newNonPreferredDistance = route.nonPreferredDistance + (segment.nonPreferredDistance || 0);
+
+        return (newNonPreferredDistance / newTotalDistance) <= maxRatio;
+    }
+
+    /**
+     * Trova strade idonee vicine a un punto specifico
+     */
+    findRoadsNearPoint(point, roads, excludeIds, maxDistance = 2000) {
+        const nearby = [];
+
+        roads.forEach(road => {
+            if (excludeIds.has(road.id)) return;
+
+            const minDist = this.getMinDistanceToRoad(point, road.coords);
+            if (minDist <= maxDistance) {
+                nearby.push({ road, distance: minDist });
+            }
+        });
+
+        nearby.sort((a, b) => a.distance - b.distance);
+        return nearby;
+    }
+
+    /**
      * Connette il punto corrente a una strada usando routing OSRM
      * Implementa anche "torna indietro" se necessario
+     * Traccia distanza su strade non-preferite
      */
-    async connectToRoadWithRouting(currentPoint, road, routingService) {
+    async connectToRoadWithRouting(currentPoint, road, routingService, currentRoute, maxNonPreferredRatio) {
         // Trova il punto più vicino sulla strada
         let minDist = Infinity;
         let closestSegmentIndex = 0;
@@ -249,29 +352,46 @@ class RouteGenerator {
         // Scegli direzione casuale
         const direction = directions[Math.floor(Math.random() * directions.length)];
 
+        // Calcola distanza della connessione (punto corrente -> inizio strada idonea)
+        const connectionDistance = this.haversineDistance(currentPoint, direction.coords[0]);
+
+        // Se la connessione è troppo lunga rispetto al limite, salta questa strada
+        if (currentRoute && maxNonPreferredRatio) {
+            const potentialNonPreferred = currentRoute.nonPreferredDistance + connectionDistance;
+            const potentialTotal = currentRoute.totalDistance + connectionDistance + this.calculateDistance(direction.coords);
+
+            if ((potentialNonPreferred / potentialTotal) > maxNonPreferredRatio) {
+                // Connessione troppo lunga, sforerebbe il limite 20%
+                return null;
+            }
+        }
+
         try {
-            // Routing dal punto corrente al punto di inizio del segmento
+            // Routing dal punto corrente al punto di inizio del segmento (strade non-idonee)
             const routeToRoad = await routingService.getRoute(currentPoint, direction.coords[0]);
+            const connectionDist = routingService.calculateDistance(routeToRoad);
 
-            // Combina: routing verso strada + percorso lungo la strada
+            // Combina: routing verso strada + percorso lungo la strada idonea
             const fullPath = [...routeToRoad, ...direction.coords];
-
-            const distance = routingService.calculateDistance(fullPath);
+            const roadDistance = this.calculateDistance(direction.coords);
+            const totalDistance = connectionDist + roadDistance;
 
             return {
                 coords: fullPath,
-                distance: distance,
+                distance: totalDistance,
+                nonPreferredDistance: connectionDist, // Solo la connessione è non-preferita
                 roadId: road.id,
                 direction: direction.name
             };
         } catch (error) {
             console.error('Errore routing verso strada:', error);
 
-            // Fallback: usa solo la strada senza routing
+            // Fallback: usa solo la strada senza routing (assume connessione diretta breve)
             const distance = this.calculateDistance(direction.coords);
             return {
                 coords: direction.coords,
                 distance: distance,
+                nonPreferredDistance: connectionDistance, // Approssimazione
                 roadId: road.id,
                 direction: direction.name
             };
@@ -399,6 +519,10 @@ class RouteGenerator {
         // Mostra nuovo percorso
         this.mapManager.addGeneratedRoute(route.coords);
 
+        // Calcola percentuale strade non-preferite
+        const nonPreferredPercent = route.nonPreferredDistance ?
+            (route.nonPreferredDistance / route.totalDistance * 100).toFixed(1) : 0;
+
         // Aggiorna UI
         const resultDiv = document.getElementById('routeResult');
         const distanceEl = document.getElementById('routeDistance');
@@ -408,7 +532,12 @@ class RouteGenerator {
         if (distanceEl) distanceEl.textContent = route.totalDistance.toFixed(2);
         if (segmentsEl) segmentsEl.textContent = route.segments.length;
 
-        showToast(`Percorso generato: ${route.totalDistance.toFixed(2)} km!`, 4000);
+        // Messaggio con info su strade non-preferite
+        const message = nonPreferredPercent > 0 ?
+            `Percorso generato: ${route.totalDistance.toFixed(2)} km (${nonPreferredPercent}% su altre strade)` :
+            `Percorso generato: ${route.totalDistance.toFixed(2)} km (100% su strade preferite!)`;
+
+        showToast(message, 5000);
     }
 
     getCurrentRoute() {
