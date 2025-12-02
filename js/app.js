@@ -120,11 +120,11 @@ document.addEventListener('DOMContentLoaded', () => {
             routeGenerator.setStartPoint(latlng);
             mapManager.resetCursor();
 
-            // Carica automaticamente strade ciclabili OSM in un raggio di 50km
-            showToast('🔄 Caricamento strade ciclabili OSM (50km)...', 3000);
+            // Carica automaticamente strade ciclabili OSM in un raggio di 25km
+            showToast('🔄 Caricamento strade ciclabili OSM (25km)...', 3000);
 
             try {
-                const osmRoads = await osmLoader.loadCyclewaysAroundPoint(latlng, 50);
+                const osmRoads = await osmLoader.loadCyclewaysAroundPoint(latlng, 25);
 
                 // Salva le strade OSM nel roadManager per il generatore di percorsi
                 roadManager.setOSMRoads(osmRoads);

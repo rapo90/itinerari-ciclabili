@@ -6,15 +6,21 @@ class OSMCyclewaysLoader {
     constructor(roadManager, mapManager) {
         this.roadManager = roadManager;
         this.mapManager = mapManager;
-        this.overpassUrl = 'https://overpass-api.de/api/interpreter';
+        // Server Overpass alternativi più affidabili
+        this.overpassUrls = [
+            'https://overpass.kumi.systems/api/interpreter',
+            'https://overpass-api.de/api/interpreter',
+            'https://overpass.openstreetmap.ru/api/interpreter'
+        ];
+        this.currentUrlIndex = 0;
         this.loadedAreas = new Set(); // Cache aree già caricate
         this.osmRoads = []; // Strade OSM caricate
     }
 
     /**
-     * Carica strade ciclabili OSM in un raggio di 50km dal punto specificato
+     * Carica strade ciclabili OSM in un raggio di 25km dal punto specificato
      */
-    async loadCyclewaysAroundPoint(centerPoint, radiusKm = 50) {
+    async loadCyclewaysAroundPoint(centerPoint, radiusKm = 25) {
         const radiusMeters = radiusKm * 1000;
 
         // Crea ID area per evitare duplicati
@@ -64,12 +70,12 @@ class OSMCyclewaysLoader {
     }
 
     /**
-     * Query Overpass API per strade ciclabili
+     * Query Overpass API per strade ciclabili con retry automatico
      */
     async queryOverpass(centerPoint, radiusMeters) {
         // Query Overpass RESTRITTIVA - solo piste ciclabili dedicate
         const query = `
-            [out:json][timeout:60];
+            [out:json][timeout:180];
             (
               // SOLO piste ciclabili dedicate
               way["highway"="cycleway"](around:${radiusMeters},${centerPoint.lat},${centerPoint.lng});
@@ -86,20 +92,45 @@ class OSMCyclewaysLoader {
             out geom;
         `;
 
-        const response = await fetch(this.overpassUrl, {
-            method: 'POST',
-            body: query,
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
+        // Retry con server alternativi in caso di errore
+        for (let attempt = 0; attempt < this.overpassUrls.length; attempt++) {
+            const url = this.overpassUrls[(this.currentUrlIndex + attempt) % this.overpassUrls.length];
 
-        if (!response.ok) {
-            throw new Error(`Overpass API error: ${response.status}`);
+            try {
+                console.log(`🌐 Tentativo ${attempt + 1}/${this.overpassUrls.length}: ${url.split('/')[2]}`);
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: query,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.warn(`⚠️ Server ${url.split('/')[2]} ha restituito ${response.status}`);
+                    continue; // Prova il prossimo server
+                }
+
+                const data = await response.json();
+
+                // Se ha funzionato, usa questo server per le prossime query
+                this.currentUrlIndex = (this.currentUrlIndex + attempt) % this.overpassUrls.length;
+                console.log(`✓ Risposta ricevuta da ${url.split('/')[2]}: ${data.elements?.length || 0} elementi`);
+
+                return data.elements || [];
+
+            } catch (error) {
+                console.warn(`⚠️ Errore con server ${url.split('/')[2]}:`, error.message);
+                if (attempt === this.overpassUrls.length - 1) {
+                    // Ultimo tentativo fallito
+                    throw new Error(`Tutti i server Overpass non disponibili`);
+                }
+                // Altrimenti continua con il prossimo server
+            }
         }
 
-        const data = await response.json();
-        return data.elements || [];
+        return [];
     }
 
     /**
