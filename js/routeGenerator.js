@@ -7,6 +7,10 @@ class RouteGenerator {
         this.roadManager = roadManager;
         this.mapManager = mapManager;
         this.startPoint = null;
+
+        // Cache per ottimizzazioni performance
+        this.overlapCache = new Map(); // Cache overlap percentages
+        this.distanceCache = new Map(); // Cache distanze calcolate
     }
 
     setStartPoint(latlng) {
@@ -66,7 +70,15 @@ class RouteGenerator {
 
         console.log(`🔄 Inizio generazione loop: ${roads.length} strade disponibili, target ${targetDistance}km`);
 
+        // 🚀 OTTIMIZZAZIONE: Pre-calcola overlap matrix una volta sola
+        console.time('⚡ Pre-calcolo overlap matrix');
+        this.buildOverlapCache(roads);
+        console.timeEnd('⚡ Pre-calcolo overlap matrix');
+
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // Pulisci cache distanze ad ogni tentativo (evita crescita memoria)
+            this.distanceCache.clear();
+
             // Rilassamento più aggressivo dei vincoli
             const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
             const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : (attempt < 35 ? 5000 : 8000));
@@ -236,7 +248,17 @@ class RouteGenerator {
 
         const routingService = window.routingService || new RoutingService();
 
+        console.log(`🔄 Inizio generazione lineare: ${roads.length} strade disponibili, target ${targetDistance}km`);
+
+        // 🚀 OTTIMIZZAZIONE: Pre-calcola overlap matrix una volta sola
+        console.time('⚡ Pre-calcolo overlap matrix');
+        this.buildOverlapCache(roads);
+        console.timeEnd('⚡ Pre-calcolo overlap matrix');
+
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // Pulisci cache distanze ad ogni tentativo (evita crescita memoria)
+            this.distanceCache.clear();
+
             // Rilassamento più aggressivo dei vincoli
             const maxNonPreferredRatio = attempt < 10 ? 0.20 : (attempt < 20 ? 0.25 : (attempt < 35 ? 0.30 : 0.40));
             const searchRadius = attempt < 10 ? 3000 : (attempt < 20 ? 4000 : (attempt < 35 ? 5000 : 8000));
@@ -468,7 +490,7 @@ class RouteGenerator {
     }
 
     /**
-     * Verifica se una strada si sovrappone significativamente con strade già usate
+     * 🚀 OTTIMIZZATO: Verifica overlap usando cache pre-calcolata (O(1) invece di O(m²))
      */
     hasSignificantOverlap(road, allRoads, usedIds, threshold = 0.90) {
         // Ottieni lista di strade già usate
@@ -484,9 +506,10 @@ class RouteGenerator {
             return false;
         });
 
-        // Controlla sovrapposizione con ciascuna strada usata
+        // Controlla sovrapposizione con ciascuna strada usata usando CACHE
         for (let usedRoad of usedRoads) {
-            const overlapPercentage = this.calculateOverlapPercentage(road.coords, usedRoad.coords);
+            // 🚀 Usa cache invece di ricalcolare! O(1) lookup
+            const overlapPercentage = this.getOverlapFromCache(road.id, usedRoad.id);
 
             // Usa soglia configurabile (default 90%, era 70%)
             if (overlapPercentage > threshold) {
@@ -498,7 +521,72 @@ class RouteGenerator {
     }
 
     /**
+     * 🚀 OTTIMIZZATO: Pre-costruisce cache overlap per tutte le coppie di strade
+     * Chiamato UNA VOLTA all'inizio, poi lookup O(1)
+     */
+    buildOverlapCache(roads) {
+        this.overlapCache.clear();
+
+        // Pre-calcola overlap per tutte le coppie (solo upper triangle matrix)
+        for (let i = 0; i < roads.length; i++) {
+            for (let j = i + 1; j < roads.length; j++) {
+                const road1 = roads[i];
+                const road2 = roads[j];
+
+                // Calcola overlap con coordinate decimate (molto più veloce!)
+                const overlap = this.calculateOverlapPercentageFast(road1.coords, road2.coords);
+
+                // Salva in entrambe le direzioni
+                const key1 = `${road1.id}:${road2.id}`;
+                const key2 = `${road2.id}:${road1.id}`;
+                this.overlapCache.set(key1, overlap);
+                this.overlapCache.set(key2, overlap);
+            }
+        }
+
+        console.log(`   ✅ Cache overlap: ${this.overlapCache.size} coppie pre-calcolate`);
+    }
+
+    /**
+     * 🚀 OTTIMIZZATO: Ottiene overlap da cache (O(1) invece di O(m²))
+     */
+    getOverlapFromCache(roadId1, roadId2) {
+        const key = `${roadId1}:${roadId2}`;
+        return this.overlapCache.get(key) || 0;
+    }
+
+    /**
+     * 🚀 OTTIMIZZATO: Calcola overlap con coordinate DECIMATE (20x più veloce!)
+     * Usa solo ogni 5° punto invece di tutti i punti
+     */
+    calculateOverlapPercentageFast(coords1, coords2) {
+        if (coords1.length < 2 || coords2.length < 2) return 0;
+
+        // Decimazione: usa solo ogni 5° punto (100 punti → 20 punti)
+        const step = 5;
+        const decimated1 = coords1.filter((_, i) => i % step === 0);
+        const decimated2 = coords2.filter((_, i) => i % step === 0);
+
+        let overlapCount = 0;
+        const threshold = 0.15; // 150 metri (più permissivo con meno punti)
+
+        // Conta quanti punti di decimated1 sono vicini a decimated2
+        for (let point of decimated1) {
+            for (let i = 0; i < decimated2.length - 1; i++) {
+                const dist = this.pointToSegmentDistance(point, decimated2[i], decimated2[i + 1]);
+                if (dist < threshold) {
+                    overlapCount++;
+                    break; // Early termination
+                }
+            }
+        }
+
+        return overlapCount / decimated1.length;
+    }
+
+    /**
      * Calcola la percentuale di sovrapposizione tra due strade
+     * (Versione originale - ora sostituita da calculateOverlapPercentageFast)
      */
     calculateOverlapPercentage(coords1, coords2) {
         if (coords1.length < 2 || coords2.length < 2) return 0;
@@ -571,14 +659,30 @@ class RouteGenerator {
         return { lat: xx, lng: yy };
     }
 
+    /**
+     * 🚀 OTTIMIZZATO: Calcola distanza minima con cache e decimazione
+     */
     getMinDistanceToRoad(point, roadCoords) {
+        // Cache key basato su coordinate arrotondate
+        const cacheKey = `${point.lat.toFixed(4)}_${point.lng.toFixed(4)}_${roadCoords[0].lat.toFixed(4)}_${roadCoords[0].lng.toFixed(4)}`;
+
+        // Controlla cache
+        if (this.distanceCache.has(cacheKey)) {
+            return this.distanceCache.get(cacheKey);
+        }
+
         let minDist = Infinity;
 
-        for (let i = 0; i < roadCoords.length - 1; i++) {
-            const projected = this.projectPointOnSegment(point, roadCoords[i], roadCoords[i + 1]);
+        // Decimazione: ogni 3° punto (100 → 33 punti) per calcolo distanza
+        const step = 3;
+        for (let i = 0; i < roadCoords.length - 1; i += step) {
+            const projected = this.projectPointOnSegment(point, roadCoords[i], roadCoords[Math.min(i + step, roadCoords.length - 1)]);
             const dist = this.calculateDistance([point, projected]);
             minDist = Math.min(minDist, dist);
         }
+
+        // Salva in cache
+        this.distanceCache.set(cacheKey, minDist);
 
         return minDist;
     }
