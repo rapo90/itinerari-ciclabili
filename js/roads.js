@@ -4,7 +4,8 @@
 
 class RoadManager {
     constructor() {
-        this.roads = [];
+        this.roads = []; // Strade manuali (salvate)
+        this.osmRoads = []; // Strade OSM (temporanee, non salvate)
         this.storageKey = 'suitableRoads';
         this.loadFromStorage();
     }
@@ -46,6 +47,36 @@ class RoadManager {
         return this.roads;
     }
 
+    /**
+     * Restituisce tutte le strade (manuali + OSM) per il generatore di percorsi
+     */
+    getAllRoadsForRouting() {
+        return [...this.roads, ...this.osmRoads];
+    }
+
+    /**
+     * Imposta le strade OSM (non salvate, temporanee)
+     */
+    setOSMRoads(osmRoads) {
+        this.osmRoads = osmRoads;
+        this.updateStats();
+    }
+
+    /**
+     * Ottieni solo strade OSM
+     */
+    getOSMRoads() {
+        return this.osmRoads;
+    }
+
+    /**
+     * Pulisci strade OSM
+     */
+    clearOSMRoads() {
+        this.osmRoads = [];
+        this.updateStats();
+    }
+
     getTotalDistance() {
         return this.roads.reduce((sum, road) => sum + road.distance, 0);
     }
@@ -84,12 +115,24 @@ class RoadManager {
         const roadCountEl = document.getElementById('roadCount');
         const totalDistanceEl = document.getElementById('totalDistance');
 
+        const manualCount = this.roads.length;
+        const osmCount = this.osmRoads.length;
+        const totalCount = manualCount + osmCount;
+
+        const manualDistance = this.getTotalDistance();
+        const osmDistance = this.osmRoads.reduce((sum, road) => sum + road.distance, 0);
+        const totalDistance = manualDistance + osmDistance;
+
         if (roadCountEl) {
-            roadCountEl.textContent = this.roads.length;
+            if (osmCount > 0) {
+                roadCountEl.textContent = `${manualCount} + ${osmCount} OSM`;
+            } else {
+                roadCountEl.textContent = manualCount;
+            }
         }
 
         if (totalDistanceEl) {
-            totalDistanceEl.textContent = this.getTotalDistance().toFixed(2);
+            totalDistanceEl.textContent = totalDistance.toFixed(2);
         }
     }
 

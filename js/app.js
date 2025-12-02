@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const routingService = new RoutingService();
     const mapManager = new MapManager();
     const roadManager = new RoadManager();
+    const osmLoader = new OSMCyclewaysLoader(roadManager, mapManager);
     const gpxManager = new GPXManager(roadManager, mapManager);
     const routeGenerator = new RouteGenerator(roadManager, mapManager);
 
@@ -17,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.routingService = routingService;
     window.mapManager = mapManager;
     window.roadManager = roadManager;
+    window.osmLoader = osmLoader;
     window.gpxManager = gpxManager;
     window.routeGenerator = routeGenerator;
 
@@ -114,9 +116,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Selezione punto di partenza
     selectStartBtn.addEventListener('click', () => {
-        mapManager.enableStartPointSelection((latlng) => {
+        mapManager.enableStartPointSelection(async (latlng) => {
             routeGenerator.setStartPoint(latlng);
             mapManager.resetCursor();
+
+            // Carica automaticamente strade ciclabili OSM in un raggio di 50km
+            showToast('🔄 Caricamento strade ciclabili OSM (50km)...', 3000);
+
+            try {
+                const osmRoads = await osmLoader.loadCyclewaysAroundPoint(latlng, 50);
+
+                // Salva le strade OSM nel roadManager per il generatore di percorsi
+                roadManager.setOSMRoads(osmRoads);
+
+                console.log(`✓ Caricate ${osmRoads.length} strade OSM`);
+            } catch (error) {
+                console.error('Errore caricamento OSM:', error);
+                showToast('⚠️ Errore caricamento strade OSM', 3000);
+            }
         });
     });
 

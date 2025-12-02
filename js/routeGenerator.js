@@ -25,9 +25,10 @@ class RouteGenerator {
             return null;
         }
 
-        const roads = this.roadManager.getAllRoads();
+        // Usa tutte le strade disponibili (manuali + OSM)
+        const roads = this.roadManager.getAllRoadsForRouting();
         if (roads.length === 0) {
-            showToast('Aggiungi prima delle strade idonee!', 3000);
+            showToast('Aggiungi prima delle strade idonee o seleziona un punto di partenza per caricare strade OSM!', 4000);
             return null;
         }
 
