@@ -61,7 +61,7 @@ class RouteGenerator {
     }
 
     async generateLoopRoute(targetDistance, roads) {
-        const maxAttempts = 50; // Aumentato da 30 a 50
+        const maxAttempts = 30; // Ridotto per performance (era 50)
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
@@ -241,7 +241,7 @@ class RouteGenerator {
     }
 
     async generateLinearRoute(targetDistance, roads) {
-        const maxAttempts = 50; // Aumentato da 30 a 50
+        const maxAttempts = 30; // Ridotto per performance (era 50)
         const tolerance = 3; // ±3km FISSO
         const minDistance = targetDistance - tolerance;
         const maxDistance = targetDistance + tolerance;
@@ -556,19 +556,19 @@ class RouteGenerator {
     }
 
     /**
-     * 🚀 OTTIMIZZATO: Calcola overlap con coordinate DECIMATE (20x più veloce!)
-     * Usa solo ogni 5° punto invece di tutti i punti
+     * 🚀 OTTIMIZZATO: Calcola overlap con coordinate DECIMATE (100x più veloce!)
+     * Usa solo ogni 10° punto invece di tutti i punti
      */
     calculateOverlapPercentageFast(coords1, coords2) {
         if (coords1.length < 2 || coords2.length < 2) return 0;
 
-        // Decimazione: usa solo ogni 5° punto (100 punti → 20 punti)
-        const step = 5;
+        // Decimazione AGGRESSIVA: usa solo ogni 10° punto (100 punti → 10 punti)
+        const step = 10;
         const decimated1 = coords1.filter((_, i) => i % step === 0);
         const decimated2 = coords2.filter((_, i) => i % step === 0);
 
         let overlapCount = 0;
-        const threshold = 0.15; // 150 metri (più permissivo con meno punti)
+        const threshold = 0.2; // 200 metri (più permissivo con decimazione 10x)
 
         // Conta quanti punti di decimated1 sono vicini a decimated2
         for (let point of decimated1) {
@@ -673,8 +673,8 @@ class RouteGenerator {
 
         let minDist = Infinity;
 
-        // Decimazione: ogni 3° punto (100 → 33 punti) per calcolo distanza
-        const step = 3;
+        // Decimazione: ogni 5° punto (100 → 20 punti) per calcolo distanza
+        const step = 5;
         for (let i = 0; i < roadCoords.length - 1; i += step) {
             const projected = this.projectPointOnSegment(point, roadCoords[i], roadCoords[Math.min(i + step, roadCoords.length - 1)]);
             const dist = this.calculateDistance([point, projected]);

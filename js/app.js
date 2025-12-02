@@ -36,10 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // AUTO-LOAD AREA DESENZANO
     // ======================
 
-    // Carica automaticamente ciclabili OSM intorno a Desenzano del Garda (30km)
+    // Carica automaticamente ciclabili OSM intorno a Desenzano del Garda (20km)
     (async function autoLoadDesenzano() {
         const DESENZANO = { lat: 45.4708, lng: 10.5395 };
-        const RADIUS_KM = 30;
+        const RADIUS_KM = 20;  // Ridotto da 30km per performance
 
         console.log(`🔄 Caricamento automatico area Desenzano (${RADIUS_KM}km)...`);
         showToast(`🔄 Caricamento ciclabili Desenzano (${RADIUS_KM}km)...`, 3000);
