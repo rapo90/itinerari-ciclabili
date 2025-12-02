@@ -8,14 +8,18 @@ Applicazione web interattiva per la gestione e generazione di percorsi ciclabili
 ## ✨ Caratteristiche
 
 ### 🗺️ Mappa Personalizzata
-- **OpenStreetMap** con stile grafico personalizzato (tema scuro CartoDB)
+- **OpenStreetMap** con stili multipli selezionabili
+- **CyclOSM** ottimizzato per ciclismo (default)
+- Stili alternativi: OSM Standard, Humanitarian, OpenTopoMap
 - Interfaccia moderna e intuitiva
 - Geolocalizzazione automatica
 - Zoom e navigazione fluida
 
 ### 📍 Selezione Strade Idonee
 - **Disegno interattivo** direttamente sulla mappa
-- Calcolo automatico delle distanze
+- **Snap-to-Road**: le linee seguono automaticamente le strade (OSRM)
+- Routing intelligente per ciclabili
+- Calcolo automatico delle distanze reali
 - **Salvataggio locale** persistente (LocalStorage)
 - Modifica ed eliminazione delle strade
 

@@ -97,19 +97,62 @@ class MapManager {
         });
 
         // Event handler per quando viene creata una nuova linea
-        this.map.on(L.Draw.Event.CREATED, (e) => {
+        this.map.on(L.Draw.Event.CREATED, async (e) => {
             const layer = e.layer;
-            this.drawnItems.addLayer(layer);
+            const clickedPoints = layer.getLatLngs();
 
-            // Calcola la distanza in km
-            const distance = this.calculateDistance(layer.getLatLngs());
+            // Se ci sono almeno 2 punti, fa routing tra di loro
+            if (clickedPoints.length >= 2) {
+                showToast('Calcolo percorso stradale...', 2000);
 
-            // Salva la strada come idonea
-            if (window.roadManager) {
-                window.roadManager.addRoad(layer.getLatLngs(), distance);
+                try {
+                    // Usa il servizio di routing per seguire le strade
+                    const routingService = window.routingService || new RoutingService();
+                    const roadCoords = await routingService.getRouteMultiple(clickedPoints);
+
+                    // Crea una nuova polyline con le coordinate del percorso
+                    const roadLayer = L.polyline(roadCoords, {
+                        color: '#2E7D32',
+                        weight: 6,
+                        opacity: 0.8
+                    });
+
+                    this.drawnItems.addLayer(roadLayer);
+
+                    // Calcola la distanza effettiva del percorso
+                    const distance = routingService.calculateDistance(roadCoords);
+
+                    // Salva la strada come idonea
+                    if (window.roadManager) {
+                        window.roadManager.addRoad(roadCoords, distance);
+                    }
+
+                    showToast(`✓ Strada aggiunta: ${distance.toFixed(2)} km (segue le strade)`, 3000);
+
+                } catch (error) {
+                    console.error('Errore nel routing:', error);
+
+                    // Fallback: usa la linea retta
+                    this.drawnItems.addLayer(layer);
+                    const distance = this.calculateDistance(clickedPoints);
+
+                    if (window.roadManager) {
+                        window.roadManager.addRoad(clickedPoints, distance);
+                    }
+
+                    showToast(`⚠️ Strada aggiunta: ${distance.toFixed(2)} km (linea retta)`, 3000);
+                }
+            } else {
+                // Meno di 2 punti, aggiungi come linea normale
+                this.drawnItems.addLayer(layer);
+                const distance = this.calculateDistance(clickedPoints);
+
+                if (window.roadManager) {
+                    window.roadManager.addRoad(clickedPoints, distance);
+                }
+
+                showToast(`Strada aggiunta: ${distance.toFixed(2)} km`, 3000);
             }
-
-            showToast(`Strada aggiunta: ${distance.toFixed(2)} km`);
         });
 
         // Event handler per quando viene eliminata una linea

@@ -7,12 +7,14 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('🚴 Itinerari Ciclabili App - Inizializzazione...');
 
     // Inizializza i manager
+    const routingService = new RoutingService();
     const mapManager = new MapManager();
     const roadManager = new RoadManager();
     const gpxManager = new GPXManager(roadManager, mapManager);
     const routeGenerator = new RouteGenerator(roadManager, mapManager);
 
     // Rendi disponibili globalmente per debugging
+    window.routingService = routingService;
     window.mapManager = mapManager;
     window.roadManager = roadManager;
     window.gpxManager = gpxManager;
